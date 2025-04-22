@@ -7,11 +7,17 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserRole {
+  USER
+  ADMIN
+}
+
 model User {
   id             Int      @id @default(autoincrement())
   email          String   @unique
   username       String
   password_hash  String
+  role           UserRole @default(USER)
   is_verified    Boolean  @default(false)
   avatar_id      String?
   avatar_url     String?
@@ -40,12 +46,22 @@ model VerificationCode {
 model Media {
   id              Int             @id @default(autoincrement())
   title           String
+  original_title  String?
+  type            MediaType
   description     String?
+  poster_url      String?
+  backdrop_url    String?
   release_date    DateTime?
   rating          Float           @default(0)
+  duration        Int?
   views           Int             @default(0)
+  status          MediaStatus     @default(ACTIVE)
+  source_id       String?
+  source_type     String?
   created_at      DateTime        @default(now())
   updated_at      DateTime        @updatedAt
+  genres          Genre[]
+  episodes        Episode[]
   viewing_history ViewingHistory[]
   favorites       Favorites[]
   watchlist       Watchlist[]
@@ -93,6 +109,66 @@ model Favorites {
   media      Media    @relation(fields: [media_id], references: [id])
 
   @@unique([user_id, media_id])
+}
+
+enum MediaType {
+  MOVIE
+  SERIES
+}
+
+enum MediaStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+}
+
+enum ParserStatusType {
+  active
+  inactive
+  error
+}
+
+model Genre {
+  id     Int      @id @default(autoincrement())
+  name   String   @unique
+  media  Media[]
+}
+
+model Episode {
+  id             Int       @id @default(autoincrement())
+  title          String
+  episode_number Int
+  season_number  Int
+  air_date       DateTime?
+  description    String?
+  media_id       Int
+  media          Media     @relation(fields: [media_id], references: [id])
+
+  @@unique([media_id, season_number, episode_number])
+}
+
+model ParserStatus {
+  id             Int      @id @default(autoincrement())
+  status         ParserStatusType
+  lastRun        DateTime @default(now())
+  processedItems Int      @default(0)
+  errors         String[]
+}
+
+model ParserLog {
+  id        Int      @id @default(autoincrement())
+  message   String
+  error     String
+  timestamp DateTime @default(now())
+}
+
+model ParserSettings {
+  id             Int      @id @default(autoincrement())
+  kinopoiskApiKey String
+  omdbApiKey     String
+  updateInterval Int      @default(24)
+  autoUpdate     Boolean  @default(false)
+  contentTypes   String[] @default(["MOVIE", "SERIES"])
 }
 
 model Watchlist {

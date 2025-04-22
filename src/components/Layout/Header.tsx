@@ -149,6 +149,7 @@ const Header: React.FC = () => {
     { href: '/', label: 'Главная' },
     { href: '/catalog', label: 'Каталог' },
     { href: '/recommendations', label: 'Рекомендации' },
+    ...(user?.email === 'ivan.vergeichik@mail.ru' ? [{ href: '/admin', label: 'Админ панель' }] : []),
   ];
 
   return (
@@ -201,9 +202,10 @@ const Header: React.FC = () => {
           {isMobileMenuOpen ? <FiX size={24} /> : <FiMenu size={24} />}
         </MobileMenuButton>
 
-        <AnimatePresence>
+        <AnimatePresence mode="wait">
           {isMobileMenuOpen && (
             <MobileMenu
+              key={`mobile-menu-${isMobileMenuOpen}`}
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
               exit={{ x: '100%' }}

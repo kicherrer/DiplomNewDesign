@@ -36,6 +36,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         username: user.username,
         avatar_url: user.avatar_url,
         created_at: user.created_at,
+        role: user.role,
         notification_email: user.settings?.notification_email,
         notification_web: user.settings?.notification_web,
         privacy_profile: user.settings?.privacy_profile,

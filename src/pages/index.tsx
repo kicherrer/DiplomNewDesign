@@ -124,63 +124,65 @@ const HomePage: React.FC = () => {
 
   return (
     <Layout>
-      <AnimatePresence>
-        <HeroSection
-          as={motion.section}
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.6 }}
-        >
-          <HeroTitle
-            initial={{ y: -20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.3 }}
+      <AnimatePresence mode="wait">
+        <motion.div key="home-page-content">
+          <HeroSection
+            as={motion.section}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.6 }}
           >
-            Добро пожаловать в MediaApp
-          </HeroTitle>
-          <HeroSubtitle
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.5 }}
-          >
-            Ваш персональный помощник в мире медиа-контента
-          </HeroSubtitle>
-        </HeroSection>
-
-        <FeaturesGrid
-          as={motion.div}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.7 }}
-        >
-          {features.map((feature, index) => (
-            <FeatureCard
-              key={index}
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              transition={{ 
-                duration: 0.5, 
-                delay: 0.8 + index * 0.1,
-                type: "spring",
-                stiffness: 100 
-              }}
+            <HeroTitle
+              initial={{ y: -20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.3 }}
             >
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
+              Добро пожаловать в MediaApp
+            </HeroTitle>
+            <HeroSubtitle
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.5 }}
+            >
+              Ваш персональный помощник в мире медиа-контента
+            </HeroSubtitle>
+          </HeroSection>
+
+          <FeaturesGrid
+            as={motion.div}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.7 }}
+          >
+            {features.map((feature, index) => (
+              <FeatureCard
+                key={`feature-${index}`}
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
                 transition={{ 
-                  delay: 1 + index * 0.1,
+                  duration: 0.5, 
+                  delay: 0.8 + index * 0.1,
                   type: "spring",
-                  stiffness: 200
+                  stiffness: 100 
                 }}
               >
-                <feature.icon size={40} color={theme.colors.primary} />
-              </motion.div>
-              <FeatureTitle>{feature.title}</FeatureTitle>
-              <FeatureDescription>{feature.description}</FeatureDescription>
-            </FeatureCard>
-          ))}
-        </FeaturesGrid>
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ 
+                    delay: 1 + index * 0.1,
+                    type: "spring",
+                    stiffness: 200
+                  }}
+                >
+                  <feature.icon size={40} color={theme.colors.primary} />
+                </motion.div>
+                <FeatureTitle>{feature.title}</FeatureTitle>
+                <FeatureDescription>{feature.description}</FeatureDescription>
+              </FeatureCard>
+            ))}
+          </FeaturesGrid>
+        </motion.div>
       </AnimatePresence>
     </Layout>
   );

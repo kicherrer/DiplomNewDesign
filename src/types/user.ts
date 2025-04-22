@@ -1,17 +1,18 @@
 export interface User {
-  id: string;
+  id: number;
   username: string;
   email: string;
-  avatar_url?: string;
-  views_count?: number;
-  favorites_count?: number;
-  watchlist_count?: number;
-  created_at?: string;
-  updated_at?: string;
-  settings?: UserSettings;
-  viewing_history?: ViewingHistory[];
-  favorites?: Favorites[];
-  watchlist?: Watchlist[];
+  avatar_url: string | null;
+  views_count: number;
+  favorites_count: number;
+  watchlist_count: number;
+  created_at: Date;
+  updated_at: Date;
+  settings: UserSettings | null;
+  viewing_history: ViewingHistory[];
+  favorites: Favorites[];
+  watchlist: Watchlist[];
+  role: 'USER' | 'ADMIN';
 }
 
 export interface UserSettings {
@@ -46,13 +47,14 @@ export interface Watchlist {
 }
 
 export interface UserProfile {
-  id: string;
+  id: number;
   username: string;
   email: string;
-  avatar_id?: string;
-  views_count?: number;
-  favorites_count?: number;
-  watchlist_count?: number;
-  created_at?: string;
-  updated_at?: string;
+  avatar_url: string | null;
+  views_count: number;
+  favorites_count: number;
+  watchlist_count: number;
+  created_at: Date;
+  updated_at: Date;
+  role: 'USER' | 'ADMIN';
 }

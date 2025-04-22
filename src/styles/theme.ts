@@ -10,6 +10,7 @@ export const theme: DefaultTheme = {
     primary: '#FF5C00',
     primaryDark: '#CC4900',
     secondary: '#FF3D00',
+    card: '#2B2440',
     background: '#1F1B2E',
     surface: '#2B2440',
     text: '#FFFFFF',
@@ -98,6 +99,7 @@ declare module 'styled-components' {
       primary: string;
       primaryDark: string;
       secondary: string;
+      card: string;
       background: string;
       surface: string;
       text: string;
