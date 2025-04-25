@@ -224,26 +224,35 @@ const AuthForm: React.FC<AuthFormProps> = ({ onSuccess }) => {
           <Form onSubmit={handleSubmit}>
             <Input
               type="email"
+              id="email"
+              name="email"
               placeholder="Email"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               required
+              autoComplete="email"
             />
             {!isLogin && (
               <Input
                 type="text"
+                id="username"
+                name="username"
                 placeholder="Имя пользователя"
                 value={formData.username}
                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                 required
+                autoComplete="username"
               />
             )}
             <Input
               type="password"
+              id="password"
+              name="password"
               placeholder="Пароль"
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               required
+              autoComplete="current-password"
             />
             <Button
               type="submit"
@@ -262,11 +271,14 @@ const AuthForm: React.FC<AuthFormProps> = ({ onSuccess }) => {
         <Form onSubmit={handleVerify}>
           <Input
             type="text"
+            id="verificationCode"
+            name="verificationCode"
             placeholder="Введите код подтверждения"
             value={verificationCode}
             onChange={(e) => setVerificationCode(e.target.value)}
             maxLength={4}
             required
+            autoComplete="one-time-code"
           />
           <Button
             type="submit"

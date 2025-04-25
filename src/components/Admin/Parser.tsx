@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Button, Tab, Tabs, Typography, Paper, CircularProgress, List, ListItem, ListItemText } from '@mui/material';
 import { styled } from '@mui/material/styles';
 
@@ -38,49 +38,76 @@ interface ParserSettings {
   contentTypes: string[];
 }
 
-export default function Parser() {
+interface ParserProps {
+  onError?: (error: string) => void;
+}
+
+const Parser: React.FC<ParserProps> = ({ onError }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [status, setStatus] = useState<ParserStatus | null>(null);
   const [settings, setSettings] = useState<ParserSettings | null>(null);
   const [logs, setLogs] = useState<ParserLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdate, setLastUpdate] = useState<number>(Date.now());
 
-  const fetchParserData = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/admin/parser', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+  const handleError = useCallback((message: string) => {
+    setError(message);
+    onError?.(message);
+    setTimeout(() => setError(null), 5000);
+  }, [onError]);
+
+  const fetchData = useCallback(async (endpoint: string, signal: AbortSignal) => {
+    const token = localStorage.getItem('token');
+    if (!token) throw new Error('Токен авторизации не найден');
+
+    const response = await fetch(endpoint, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      },
+      signal
+    });
+
+    if (!response.ok) {
+      if (response.status === 503) throw new Error('Сервис временно недоступен');
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+      throw new Error(data.error || 'Ошибка при загрузке данных');
+    }
+
+    return response.json();
+  }, []);
+
+  const updateParserStatus = useCallback(async () => {
+    const now = Date.now();
+    if (now - lastUpdate < 3000) return; // Добавляем debounce
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    try {
+      const data = await fetchData('/api/admin/parser', controller.signal);
       setStatus(data.status);
       setSettings(data.settings);
       setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка при загрузке данных парсера');
-    }
-  };
+      setLastUpdate(now);
 
-  const fetchLogs = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/admin/parser/logs', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
-      setLogs(data);
+      if (activeTab === 1) {
+        const logsData = await fetchData('/api/admin/parser/logs', controller.signal);
+        setLogs(logsData);
+      }
     } catch (err) {
-      console.error('Error fetching logs:', err);
+      if (err instanceof Error && err.name !== 'AbortError') {
+        handleError(err.message);
+      }
+    } finally {
+      setLoading(false);
+      clearTimeout(timeoutId);
     }
-  };
+  }, [activeTab, fetchData, handleError, lastUpdate]);
 
-  const startParser = async () => {
+  const startParser = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch('/api/admin/parser?action=start', {
@@ -94,63 +121,51 @@ export default function Parser() {
           omdbApiKey: settings?.omdbApiKey
         })
       });
+
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
-      await fetchParserData();
-      await fetchLogs();
+      
+      await updateParserStatus();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка при запуске парсера');
+      handleError(err instanceof Error ? err.message : 'Ошибка при запуске парсера');
     }
-  };
+  }, [settings, updateParserStatus, handleError]);
 
-  const stopParser = async () => {
+  const stopParser = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch('/api/admin/parser?action=stop', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
+
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
-      await fetchParserData();
-      await fetchLogs();
+      
+      await updateParserStatus();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка при остановке парсера');
+      handleError(err instanceof Error ? err.message : 'Ошибка при остановке парсера');
     }
-  };
+  }, [updateParserStatus, handleError]);
 
   useEffect(() => {
     let isSubscribed = true;
-    
+    const controller = new AbortController();
+
     const loadData = async () => {
       if (!isSubscribed) return;
-      setLoading(true);
-      try {
-        await Promise.all([fetchParserData(), fetchLogs()]);
-      } catch (error) {
-        console.error('Error loading data:', error);
-      }
-      if (isSubscribed) {
-        setLoading(false);
-      }
+      await updateParserStatus();
     };
-    
-    loadData();
 
-    const interval = setInterval(() => {
-      if (status?.status === 'active' && isSubscribed) {
-        Promise.all([fetchParserData(), fetchLogs()])
-          .catch(error => console.error('Error updating data:', error));
-      }
-    }, 10000);
+    loadData();
+    const interval = setInterval(loadData, status?.status === 'active' ? 10000 : 30000); // Увеличиваем интервалы
 
     return () => {
       isSubscribed = false;
+      controller.abort();
       clearInterval(interval);
     };
-  }, [status?.status]);
+  }, [status?.status, updateParserStatus]);
 
   if (loading) {
     return (
@@ -233,4 +248,6 @@ export default function Parser() {
       )}
     </ParserContainer>
   );
-}
+};
+
+export default Parser;

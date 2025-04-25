@@ -1,118 +1,30 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import styled from 'styled-components';
-import { motion } from 'framer-motion';
-import { FiEdit2, FiTrash2, FiImage, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
+import { Box, Paper, Typography, List, ListItem, ListItemText, CircularProgress, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField } from '@mui/material';
+import { styled } from '@mui/material/styles';
+import { FiEdit2, FiTrash2, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 
-const HistoryContainer = styled.div`
-  background: ${({ theme }) => theme.colors.card};
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-top: 2rem;
-`;
+const HistoryContainer = styled(Paper)(({ theme }) => ({
+  padding: theme.spacing(2),
+  marginTop: theme.spacing(2)
+}));
 
-const HistoryTitle = styled.h2`
-  font-size: 1.25rem;
-  margin-bottom: 1.5rem;
-  color: ${({ theme }) => theme.colors.text};
-`;
+const HistoryItem = styled(ListItem)(({ theme }) => ({
+  borderBottom: `1px solid ${theme.palette.divider}`,
+  '&:last-child': {
+    borderBottom: 'none'
+  },
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'flex-start'
+}));
 
-const ContentGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1.5rem;
-  margin-bottom: 2rem;
-`;
-
-const ContentCard = styled(motion.div)`
-  background: ${({ theme }) => theme.colors.background};
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-`;
-
-const ContentImage = styled.div<{ $imageUrl?: string }>`
-  height: 200px;
-  background: ${({ $imageUrl }) =>
-    $imageUrl ? `url(${$imageUrl}) center/cover` : '#f0f0f0'};
-  position: relative;
-`;
-
-const ContentInfo = styled.div`
-  padding: 1rem;
-`;
-
-const ContentTitle = styled.h3`
-  font-size: 1rem;
-  margin-bottom: 0.5rem;
-  color: ${({ theme }) => theme.colors.text};
-`;
-
-const ContentMeta = styled.div`
-  font-size: 0.875rem;
-  color: ${({ theme }) => theme.colors.textSecondary};
-  margin-bottom: 1rem;
-`;
-
-const ActionButtons = styled.div`
-  display: flex;
-  gap: 0.5rem;
-`;
-
-const ActionButton = styled(motion.button)`
-  padding: 0.5rem;
-  border: none;
-  background: ${({ theme }) => theme.colors.surface};
-  color: ${({ theme }) => theme.colors.text};
-  border-radius: 6px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-size: 0.875rem;
-
-  &:hover {
-    background: ${({ theme }) => theme.colors.surfaceHover};
-  }
-`;
-
-const EditModal = styled(motion.div)`
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: ${({ theme }) => theme.colors.background};
-  padding: 2rem;
-  border-radius: 12px;
-  width: 90%;
-  max-width: 600px;
-  z-index: 1000;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-`;
-
-const Overlay = styled(motion.div)`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 999;
-`;
-
-const Input = styled.input`
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid ${({ theme }) => theme.colors.border};
-  border-radius: 6px;
-  margin-bottom: 1rem;
-  background: ${({ theme }) => theme.colors.surface};
-  color: ${({ theme }) => theme.colors.text};
-
-  &:focus {
-    outline: none;
-    border-color: ${({ theme }) => theme.colors.primary};
-  }
-`;
+const PaginationContainer = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  justifyContent: 'center',
+  alignItems: 'center',
+  gap: theme.spacing(2),
+  marginTop: theme.spacing(2)
+}));
 
 interface ContentItem {
   id: string;
@@ -122,37 +34,6 @@ interface ContentItem {
   addedAt: string;
   source: string;
 }
-
-const Pagination = styled.div`
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 1rem;
-  margin-top: 2rem;
-`;
-
-const PageButton = styled(motion.button)<{ $active?: boolean }>`
-  padding: 0.5rem 1rem;
-  border: none;
-  background: ${({ $active, theme }) =>
-    $active ? theme.colors.primary : theme.colors.surface};
-  color: ${({ $active }) => ($active ? 'white' : 'inherit')};
-  border-radius: 6px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  &:hover:not(:disabled) {
-    background: ${({ $active, theme }) =>
-      $active ? theme.colors.primary : theme.colors.surfaceHover};
-  }
-`;
 
 interface ParserHistoryProps {
   onUpdateContent: (id: string, data: Partial<ContentItem>) => Promise<void>;
@@ -164,10 +45,13 @@ const ParserHistory: React.FC<ParserHistoryProps> = ({
   onDeleteContent,
 }) => {
   const [content, setContent] = useState<ContentItem[]>([]);
-  const [editingItem, setEditingItem] = useState<ContentItem | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 40;
+  const [editItem, setEditItem] = useState<ContentItem | null>(null);
+  const [editFormData, setEditFormData] = useState<Partial<ContentItem>>({});
+  const [lastUpdate, setLastUpdate] = useState<number>(Date.now());
+  const itemsPerPage = 20;
 
   const totalPages = useMemo(() => Math.ceil(content.length / itemsPerPage), [content.length]);
   
@@ -177,235 +61,202 @@ const ParserHistory: React.FC<ParserHistoryProps> = ({
   }, [content, currentPage]);
 
   const fetchHistory = useCallback(async () => {
+    if (loading) return;
+    
+    const now = Date.now();
+    if (now - lastUpdate < 5000) return; // Добавляем debounce
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
     try {
+      setLoading(true);
+      setError(null);
+
       const token = localStorage.getItem('token');
-      if (!token) {
-        console.warn('No token found, skipping fetch');
-        return;
-      }
+      if (!token) throw new Error('Токен авторизации не найден');
 
       const response = await fetch('/api/admin/parser/history', {
         headers: {
-          Authorization: `Bearer ${token}`,
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
         },
+        signal: controller.signal
       });
 
       if (!response.ok) {
-        if (response.status === 401) {
-          console.warn('Unauthorized access, please login again');
-          return;
-        }
-        throw new Error(`Failed to fetch history: ${response.statusText}`);
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Ошибка при загрузке истории');
       }
 
       const data = await response.json();
       setContent(data);
-    } catch (error) {
-      console.error('Error fetching parser history:', error);
+      setLastUpdate(now);
+    } catch (err) {
+      if (err instanceof Error && err.name !== 'AbortError') {
+        setError(err.message);
+      }
+    } finally {
+      setLoading(false);
+      clearTimeout(timeoutId);
+      controller.abort();
     }
-  }, []);
+  }, [loading, lastUpdate]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    
+    let isSubscribed = true;
+    const intervalId = setInterval(() => {
+      if (isSubscribed) fetchHistory();
+    }, 60000); // Увеличиваем интервал обновления до 1 минуты
+
     fetchHistory();
-    interval = setInterval(fetchHistory, 300000);
 
     return () => {
-      if (interval) clearInterval(interval);
+      isSubscribed = false;
+      clearInterval(intervalId);
     };
   }, [fetchHistory]);
 
   const handleEdit = (item: ContentItem) => {
-    setEditingItem(item);
+    setEditItem(item);
+    setEditFormData({
+      title: item.title,
+      type: item.type,
+      source: item.source
+    });
   };
 
-  const handleSave = async () => {
-    if (!editingItem) return;
+  const handleEditSubmit = async () => {
+    if (!editItem || !editFormData) return;
 
-    setLoading(true);
     try {
-      await onUpdateContent(editingItem.id, editingItem);
-      setContent(content.map(item =>
-        item.id === editingItem.id ? editingItem : item
-      ));
-      setEditingItem(null);
-    } catch (error) {
-      console.error('Error updating content:', error);
-    } finally {
-      setLoading(false);
+      await onUpdateContent(editItem.id, editFormData);
+      setContent(prevContent =>
+        prevContent.map(item =>
+          item.id === editItem.id ? { ...item, ...editFormData } : item
+        )
+      );
+      setEditItem(null);
+      setEditFormData({});
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      }
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Вы уверены, что хотите удалить этот контент?')) return;
-
     try {
       await onDeleteContent(id);
-      setContent(content.filter(item => item.id !== id));
-    } catch (error) {
-      console.error('Error deleting content:', error);
+      setContent(prevContent => prevContent.filter(item => item.id !== id));
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      }
     }
   };
 
+  if (loading && !content.length) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" p={3}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
   return (
     <HistoryContainer>
-      <HistoryTitle>История добавленного контента</HistoryTitle>
-      <ContentGrid>
+      <Typography variant="h6" gutterBottom>
+        История парсера
+      </Typography>
+      {error && (
+        <Typography color="error" gutterBottom>
+          {error}
+        </Typography>
+      )}
+      <List>
         {currentItems.map((item) => (
-          <ContentCard
-            key={item.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            <ContentImage $imageUrl={item.posterUrl}>
-              {!item.posterUrl && <FiImage size={24} />}
-            </ContentImage>
-            <ContentInfo>
-              <ContentTitle>{item.title}</ContentTitle>
-              <ContentMeta>
-                {item.type === 'movie' ? 'Фильм' : 'Сериал'} • {item.source} •{' '}
-                {new Date(item.addedAt).toLocaleDateString()}
-              </ContentMeta>
-              <ActionButtons>
-                <ActionButton
-                  onClick={() => handleEdit(item)}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <FiEdit2 size={14} /> Редактировать
-                </ActionButton>
-                <ActionButton
-                  onClick={() => handleDelete(item.id)}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <FiTrash2 size={14} /> Удалить
-                </ActionButton>
-              </ActionButtons>
-            </ContentInfo>
-          </ContentCard>
+          <HistoryItem key={item.id}>
+            <ListItemText
+              primary={item.title}
+              secondary={
+                <>
+                  <Typography variant="body2" color="textSecondary">
+                    {item.type} | {item.source}
+                  </Typography>
+                  <Typography variant="caption" color="textSecondary">
+                    {new Date(item.addedAt).toLocaleString()}
+                  </Typography>
+                </>
+              }
+            />
+            <Box>
+              <IconButton size="small" onClick={() => handleEdit(item)}>
+                <FiEdit2 />
+              </IconButton>
+              <IconButton size="small" onClick={() => handleDelete(item.id)}>
+                <FiTrash2 />
+              </IconButton>
+            </Box>
+          </HistoryItem>
         ))}
-      </ContentGrid>
+      </List>
 
-      {totalPages > 1 && (
-        <Pagination>
-          <PageButton
-            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-            disabled={currentPage === 1}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <FiChevronLeft /> Назад
-          </PageButton>
-          
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-            <PageButton
-              key={page}
-              $active={currentPage === page}
-              onClick={() => setCurrentPage(page)}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              {page}
-            </PageButton>
-          ))}
-          
-          <PageButton
-            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-            disabled={currentPage === totalPages}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            Вперед <FiChevronRight />
-          </PageButton>
-        </Pagination>
-      )}
-      {editingItem && (
-        <>
-          <Overlay
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setEditingItem(null)}
+      <PaginationContainer>
+        <IconButton
+          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+          disabled={currentPage === 1}
+        >
+          <FiChevronLeft />
+        </IconButton>
+        <Typography>
+          Страница {currentPage} из {totalPages}
+        </Typography>
+        <IconButton
+          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+          disabled={currentPage === totalPages}
+        >
+          <FiChevronRight />
+        </IconButton>
+      </PaginationContainer>
+
+      <Dialog open={!!editItem} onClose={() => setEditItem(null)}>
+        <DialogTitle>Редактировать элемент</DialogTitle>
+        <DialogContent>
+          <TextField
+            fullWidth
+            label="Название"
+            value={editFormData.title || ''}
+            onChange={(e) => setEditFormData(prev => ({ ...prev, title: e.target.value }))}
+            margin="normal"
           />
-          <EditModal
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 50 }}
+          <TextField
+            fullWidth
+            label="Тип"
+            value={editFormData.type || ''}
+            onChange={(e) => setEditFormData(prev => ({ ...prev, type: e.target.value as 'movie' | 'series' }))}
+            margin="normal"
+            select
+            SelectProps={{ native: true }}
           >
-            <h3>Редактирование контента</h3>
-            <Input
-              type="text"
-              value={editingItem.title}
-              onChange={(e) =>
-                setEditingItem({ ...editingItem, title: e.target.value })
-              }
-              placeholder="Название"
-            />
-            <Input
-              type="text"
-              value={editingItem.posterUrl}
-              onChange={(e) =>
-                setEditingItem({ ...editingItem, posterUrl: e.target.value })
-              }
-              placeholder="URL постера"
-            />
-            <ActionButtons>
-              <ActionButton
-                onClick={handleSave}
-                disabled={loading}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                {loading ? 'Сохранение...' : 'Сохранить'}
-              </ActionButton>
-              <ActionButton
-                onClick={() => setEditingItem(null)}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                Отмена
-              </ActionButton>
-            </ActionButtons>
-          </EditModal>
-        </>
-      )}
-      
-      {totalPages > 1 && (
-        <Pagination>
-          <PageButton
-            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-            disabled={currentPage === 1}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <FiChevronLeft /> Назад
-          </PageButton>
-          
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-            <PageButton
-              key={page}
-              $active={currentPage === page}
-              onClick={() => setCurrentPage(page)}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              {page}
-            </PageButton>
-          ))}
-          
-          <PageButton
-            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-            disabled={currentPage === totalPages}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            Вперед <FiChevronRight />
-          </PageButton>
-        </Pagination>
-      )}
+            <option value="movie">Фильм</option>
+            <option value="series">Сериал</option>
+          </TextField>
+          <TextField
+            fullWidth
+            label="Источник"
+            value={editFormData.source || ''}
+            onChange={(e) => setEditFormData(prev => ({ ...prev, source: e.target.value }))}
+            margin="normal"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditItem(null)}>Отмена</Button>
+          <Button onClick={handleEditSubmit} color="primary">
+            Сохранить
+          </Button>
+        </DialogActions>
+      </Dialog>
     </HistoryContainer>
   );
 };

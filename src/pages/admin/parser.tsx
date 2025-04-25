@@ -181,10 +181,12 @@ const ParserManagement = () => {
     if (!isAuthorized || isLoading) return;
     
     try {
+      const controller = new AbortController();
       const response = await fetch('/api/admin/parser', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        }
+        },
+        signal: controller.signal
       });
 
       if (!response.ok) {
@@ -204,11 +206,48 @@ const ParserManagement = () => {
           ...data.status
         }));
       }
+      return () => controller.abort();
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
       console.error('Error loading parser settings:', error);
       showError(error instanceof Error ? error.message : 'Ошибка при загрузке настроек');
     }
   }, [isAuthorized, isLoading, showError]);
+
+  useEffect(() => {
+    let isMounted = true;
+    let timeoutId: NodeJS.Timeout;
+    
+    const fetchStatus = async () => {
+      if (!isMounted || !isAuthorized || status.status !== 'ACTIVE') return;
+      
+      await loadParserSettings();
+      timeoutId = setTimeout(fetchStatus, 5000);
+    };
+
+    fetchStatus();
+
+    return () => {
+      isMounted = false;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [isAuthorized, status.status, loadParserSettings]);
+
+  useEffect(() => {
+    let isMounted = true;
+    
+    if (isAuthorized && isMounted) {
+      loadParserSettings();
+    }
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthorized, loadParserSettings]);
 
   useEffect(() => {
     if (!user && !isLoading) {
@@ -225,29 +264,30 @@ const ParserManagement = () => {
   }, [user, router, isLoading]);
 
   useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
+    let isMounted = true;
     
-    const fetchStatus = async () => {
-      if (isAuthorized && status.status === 'ACTIVE') {
-        await loadParserSettings();
-        timeoutId = setTimeout(fetchStatus, 5000);
+    const initializeAuth = async () => {
+      if (!isMounted) return;
+      
+      if (!user && !isLoading) {
+        await router.push('/auth/login');
+        return;
       }
+
+      if (user?.role !== 'ADMIN') {
+        await router.push('/');
+        return;
+      }
+
+      setIsAuthorized(true);
     };
 
-    fetchStatus();
-
+    initializeAuth();
+    
     return () => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
+      isMounted = false;
     };
-  }, [isAuthorized, status.status, loadParserSettings]);
-
-  useEffect(() => {
-    if (isAuthorized) {
-      loadParserSettings();
-    }
-  }, [isAuthorized, loadParserSettings]);
+  }, [user, router, isLoading]);
 
   if (!isAuthorized) {
     return null;

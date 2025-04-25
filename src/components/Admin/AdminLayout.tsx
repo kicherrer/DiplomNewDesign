@@ -34,23 +34,51 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   const { logout, isAuthenticated, isAdmin, isLoading } = useAuth();
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
-  const navigationController = useRef<AbortController | null>(null);
   const [stats, setStats] = useState({
     totalUsers: 0,
     activeUsers: 0,
     newContent: 0
   });
+  const navigationController = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const handleRouteChange = () => {
+      setIsNavigating(false);
+      if (navigationController.current) {
+        navigationController.current = null;
+      }
+    };
+
+    const handleRouteError = (err: Error) => {
+      if (err.name !== 'AbortError') {
+        console.error('Navigation error:', err);
+      }
+      setIsNavigating(false);
+      if (navigationController.current) {
+        navigationController.current = null;
+      }
+    };
+
+    router.events.on('routeChangeComplete', handleRouteChange);
+    router.events.on('routeChangeError', handleRouteError);
+
+    return () => {
+      router.events.off('routeChangeComplete', handleRouteChange);
+      router.events.off('routeChangeError', handleRouteError);
+    };
+  }, [router]);
 
   useEffect(() => {
     return () => {
       if (navigationController.current) {
         navigationController.current.abort();
+        navigationController.current = null;
       }
     };
   }, []);
 
   const handleNavigation = useCallback(async (path: string) => {
-    if (isNavigating) return;
+    if (isNavigating || path === router.pathname) return;
     
     if (navigationController.current) {
       navigationController.current.abort();
@@ -60,8 +88,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     setIsNavigating(true);
     try {
       await router.push(path, undefined, { 
-        shallow: true,
-        scroll: false
+        shallow: false
       });
     } catch (error) {
       if (error instanceof Error && error.name !== 'AbortError') {
@@ -81,7 +108,11 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       if (!token || !isAuthenticated || !isAdmin) {
         if (isMounted) {
           setIsAuthorized(false);
-          await handleNavigation('/auth/login');
+          const currentPath = router.pathname;
+          if (currentPath !== '/auth/login') {
+            localStorage.setItem('adminPath', currentPath);
+            router.replace('/auth/login');
+          }
         }
         return;
       }
@@ -96,7 +127,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     return () => {
       isMounted = false;
     };
-  }, [isAuthenticated, isAdmin, isLoading, handleNavigation]);
+  }, [isAuthenticated, isAdmin, isLoading, router.pathname]);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -146,17 +177,18 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   }, [isAuthorized]);
 
   useEffect(() => {
-    const savedPath = localStorage.getItem('adminPath');
-    if (savedPath && isAuthorized && !isNavigating) {
-      handleNavigation(savedPath);
+    if (isAuthorized && router.pathname === '/auth/login') {
+      const savedPath = localStorage.getItem('adminPath');
+      if (savedPath) {
+        router.replace(savedPath);
+        localStorage.removeItem('adminPath');
+      } else {
+        router.replace('/admin');
+      }
     }
-  }, [isAuthorized, handleNavigation, isNavigating]);
+  }, [isAuthorized, router.pathname]);
 
-  useEffect(() => {
-    if (isAuthorized) {
-      localStorage.setItem('adminPath', router.pathname);
-    }
-  }, [router.pathname, isAuthorized]);
+
 
   const handleLogout = async () => {
     localStorage.removeItem('adminPath');
