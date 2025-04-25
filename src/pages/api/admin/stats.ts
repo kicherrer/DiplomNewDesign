@@ -2,6 +2,10 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { verifyToken } from '@/utils/auth';
 import prisma from '@/config/database';
 
+let statsCache: any = null;
+let lastCacheTime = 0;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 минут в миллисекундах
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Метод не поддерживается' });
@@ -27,6 +31,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(403).json({ error: 'Недостаточно прав' });
     }
 
+    const currentTime = Date.now();
+    if (statsCache && (currentTime - lastCacheTime) < CACHE_DURATION) {
+      return res.json(statsCache);
+    }
+
     const [totalContent, activeUsers, parserStatus] = await Promise.all([
       prisma.media.count(),
       prisma.user.count({
@@ -41,11 +50,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     ]);
 
-    res.json({
+    const stats = {
       totalContent,
       activeUsers,
       parserStatus: parserStatus?.status || 'inactive'
-    });
+    };
+
+    statsCache = stats;
+    lastCacheTime = currentTime;
+
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.json(stats);
   } catch (error) {
     console.error('Stats API error:', error);
     res.status(500).json({ error: 'Ошибка при получении статистики' });

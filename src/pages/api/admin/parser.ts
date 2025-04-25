@@ -52,11 +52,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'GET') {
     try {
-      // Проверяем кэш
+      // Проверяем кэш с учетом времени жизни
       const cacheKey = `parser_data_${payload.userId}`;
       const cachedData = getCachedData(cacheKey);
-      if (cachedData) {
-        return res.status(200).json(cachedData);
+      const cacheLifetime = 5000; // 5 секунд
+      
+      if (cachedData && Date.now() - cachedData.timestamp < cacheLifetime) {
+        return res.status(200).json(cachedData.data);
       }
 
       let settings, status;
@@ -80,8 +82,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               maxWait: 5000
             })
           ]);
-          // Сохраняем результат в кэш
-          const result = { settings, status };
+          // Сохраняем результат в кэш с временной меткой
+          const result = { 
+            data: { settings, status },
+            timestamp: Date.now()
+          };
           setCachedData(cacheKey, result);
           break;
         } catch (dbError) {
@@ -159,44 +164,85 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (action === 'start') {
       try {
         const currentStatus = await prisma.parserStatus.findFirst();
+        
+        // Проверяем, действительно ли парсер активен
         if (currentStatus?.status === 'active') {
-          return res.status(400).json({ error: 'Парсер уже запущен' });
+          // Проверяем, не завис ли парсер (если последний запуск был более 30 минут назад)
+          const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+          
+          if (currentStatus.lastRun && new Date(currentStatus.lastRun) < thirtyMinutesAgo) {
+            // Если парсер завис, сбрасываем его статус
+            await prisma.parserStatus.update({
+              where: { id: 1 },
+              data: {
+                status: 'inactive',
+                errors: ['Предыдущая сессия была прервана из-за таймаута']
+              }
+            });
+          } else {
+            return res.status(400).json({ 
+              error: 'Парсер уже запущен',
+              details: {
+                lastRun: currentStatus.lastRun,
+                processedItems: currentStatus.processedItems
+              }
+            });
+          }
         }
 
-        await prisma.parserStatus.upsert({
-          where: { id: 1 },
-          create: {
-            status: 'active',
-            lastRun: new Date(),
-            processedItems: 0,
-            errors: []
-          },
-          update: {
-            status: 'active',
-            lastRun: new Date(),
-            errors: [],
-            processedItems: 0
-          }
+        await prisma.$transaction(async (tx) => {
+          await tx.parserStatus.upsert({
+            where: { id: 1 },
+            create: {
+              status: 'active',
+              lastRun: new Date(),
+              processedItems: 0,
+              errors: []
+            },
+            update: {
+              status: 'active',
+              lastRun: new Date(),
+              errors: [],
+              processedItems: 0
+            }
+          });
+
+          await tx.parserLog.create({
+            data: {
+              message: 'Парсер запущен',
+              error: '',
+              timestamp: new Date()
+            }
+          });
         });
 
-        // Проверяем наличие API ключей
-        const kinopoiskApiKey = process.env.KINOPOISK_API_KEY;
-        const omdbApiKey = process.env.OMDB_API_KEY;
+        // Получаем API ключи из запроса
+        const { kinopoiskApiKey, omdbApiKey } = req.body;
 
         if (!kinopoiskApiKey || !omdbApiKey) {
-          return res.status(500).json({ error: 'Отсутствуют необходимые API ключи' });
+          return res.status(400).json({ error: 'Необходимо указать API ключи' });
         }
 
         // Запускаем процесс парсинга асинхронно
         const mediaParser = new MediaParser(kinopoiskApiKey, omdbApiKey);
         mediaParser.start().catch(async (error) => {
           console.error('Parser error:', error);
-          await prisma.parserStatus.update({
-            where: { id: 1 },
-            data: {
-              status: 'error',
-              errors: [(error as Error).message]
-            }
+          await prisma.$transaction(async (tx) => {
+            await tx.parserStatus.update({
+              where: { id: 1 },
+              data: {
+                status: 'error',
+                errors: [(error as Error).message]
+              }
+            });
+
+            await tx.parserLog.create({
+              data: {
+                message: 'Ошибка парсера',
+                error: (error as Error).message,
+                timestamp: new Date()
+              }
+            });
           });
         });
 
@@ -214,12 +260,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           return res.status(400).json({ error: 'Парсер не запущен' });
         }
 
-        await prisma.parserStatus.update({
-          where: { id: 1 },
-          data: {
-            status: 'inactive',
-            errors: []
-          }
+        await prisma.$transaction(async (tx) => {
+          await tx.parserStatus.update({
+            where: { id: 1 },
+            data: {
+              status: 'inactive',
+              errors: []
+            }
+          });
+
+          await tx.parserLog.create({
+            data: {
+              message: 'Парсер остановлен',
+              error: '',
+              timestamp: new Date()
+            }
+          });
         });
 
         // Останавливаем процесс парсинга

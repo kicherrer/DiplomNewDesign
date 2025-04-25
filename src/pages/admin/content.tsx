@@ -92,40 +92,74 @@ const ContentManagement = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastFetchTime, setLastFetchTime] = useState<number>(0);
+  const [retryCount, setRetryCount] = useState<number>(0);
+  const CACHE_DURATION = 60000; // 60 секунд кэширования
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 2000; // 2 секунды между попытками
 
   useEffect(() => {
-    if (!user) {
-      router.push('/auth/login');
-      return;
-    }
+    const initializeContent = async () => {
+      if (!user) {
+        await router.push('/auth/login');
+        return;
+      }
 
-    if (user.role !== 'ADMIN') {
-      router.push('/');
-      return;
-    }
+      if (user.role !== 'ADMIN') {
+        await router.push('/');
+        return;
+      }
 
-    setIsAuthorized(true);
-    fetchMediaItems();
+      setIsAuthorized(true);
+      await fetchMediaItems();
+    };
+
+    initializeContent();
   }, [user, router]);
 
   const fetchMediaItems = async () => {
+    const now = Date.now();
+    if (now - lastFetchTime < CACHE_DURATION && mediaItems.length > 0) {
+      setIsLoading(false);
+      return;
+    }
+    if (retryCount >= MAX_RETRIES) {
+      setError('Превышено максимальное количество попыток загрузки');
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Не найден токен авторизации');
+      }
+
       const response = await fetch('/api/admin/content', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         },
       });
+
       if (!response.ok) {
+        if (response.status === 401) {
+          router.push('/auth/login');
+          return;
+        }
         const errorData = await response.json();
         throw new Error(errorData.error || 'Ошибка при загрузке данных');
       }
+
       const data = await response.json();
       setMediaItems(data);
+      setLastFetchTime(Date.now());
     } catch (error) {
       console.error('Error fetching media items:', error);
       setError(error instanceof Error ? error.message : 'Ошибка при загрузке данных');
+      setRetryCount(prev => prev + 1);
+      setTimeout(() => fetchMediaItems(), RETRY_DELAY);
     } finally {
       setIsLoading(false);
     }

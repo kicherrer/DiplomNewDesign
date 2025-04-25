@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import styled from 'styled-components';
 import { useRouter } from 'next/router';
 import { motion } from 'framer-motion';
+import { useAuth } from '../../hooks/useAuth';
 
 const AuthContainer = styled(motion.div)`
   max-width: 400px;
@@ -30,7 +31,7 @@ const Input = styled(motion.input)`
   padding: ${({ theme }) => theme.spacing.md};
   border: 2px solid ${({ theme }) => theme.colors.surface};
   border-radius: ${({ theme }) => theme.borderRadius.md};
-  font-size: ${({ theme }) => theme.typography.fontSize.md};
+  font-size: ${({ theme }) => theme.typography.fontSize.base};
   transition: all 0.3s ease;
   background: ${({ theme }) => theme.colors.surface};
   color: ${({ theme }) => theme.colors.text};
@@ -40,6 +41,7 @@ const Input = styled(motion.input)`
     border-color: ${({ theme }) => theme.colors.primary};
     box-shadow: 0 0 0 2px ${({ theme }) => `${theme.colors.primary}33`};
     background: ${({ theme }) => theme.colors.background};
+  }
 `;
 
 const Button = styled(motion.button)`
@@ -48,7 +50,7 @@ const Button = styled(motion.button)`
   color: white;
   border: none;
   border-radius: ${({ theme }) => theme.borderRadius.md};
-  font-size: ${({ theme }) => theme.typography.fontSize.md};
+  font-size: ${({ theme }) => theme.typography.fontSize.base};
   font-weight: ${({ theme }) => theme.typography.fontWeight.semibold};
   cursor: pointer;
   transition: all 0.3s ease;
@@ -101,6 +103,7 @@ interface AuthFormProps {
 
 const AuthForm: React.FC<AuthFormProps> = ({ onSuccess }) => {
   const router = useRouter();
+  const auth = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [step, setStep] = useState<'auth' | 'verify'>('auth');
   const [formData, setFormData] = useState({
@@ -118,28 +121,38 @@ const AuthForm: React.FC<AuthFormProps> = ({ onSuccess }) => {
     setError('');
     setLoading(true);
 
+    if (!formData.email || !formData.password) {
+      setError('Пожалуйста, заполните все поля');
+      setLoading(false);
+      return;
+    }
+
     try {
-      const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error);
-      }
-
       if (isLogin) {
-        localStorage.setItem('token', data.token);
+        const { success, error } = await auth.login(formData.email, formData.password);
+        if (!success) {
+          throw new Error(error || 'Ошибка при авторизации');
+        }
         if (onSuccess) {
           onSuccess();
-        } else {
-          router.push('/profile');
         }
       } else {
+        const endpoint = '/api/auth/register';
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          if (res.status === 500) {
+            throw new Error('Ошибка сервера, попробуйте позже');
+          }
+          throw new Error(data.error || 'Ошибка при регистрации');
+        }
+
         setSuccess('Код подтверждения отправлен на ваш email');
         setStep('verify');
       }

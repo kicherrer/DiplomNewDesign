@@ -20,7 +20,7 @@ type Duration = {
 const prisma = new PrismaClient();
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const { action } = req.query;
+  const { param } = req.query;
   const token = req.headers.authorization?.split(' ')[1];
 
   if (!token) {
@@ -34,7 +34,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     const userId = payload.userId;
 
-    switch (action) {
+    // Если param является числом, обрабатываем как запрос профиля по ID
+    if (!isNaN(Number(param))) {
+      if (req.method !== 'GET') {
+        return res.status(405).json({ error: 'Метод не поддерживается' });
+      }
+      const profileId = parseInt(param as string);
+      const user = await prisma.user.findUnique({
+        where: { id: profileId },
+        select: {
+          id: true,
+          email: true,
+          nickname: true,
+          role: true,
+          is_verified: true,
+          created_at: true,
+          avatar_url: true
+        }
+      });
+      if (!user) {
+        return res.status(404).json({ error: 'Пользователь не найден' });
+      }
+      return res.status(200).json(user);
+    }
+
+    // Обработка других параметров профиля
+    switch (param) {
       case 'watchlist':
         return handleWatchlist(req, res, userId);
       case 'favorites':

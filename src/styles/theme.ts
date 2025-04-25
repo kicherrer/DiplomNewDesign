@@ -1,6 +1,6 @@
-import { DefaultTheme } from 'styled-components';
+import { Theme } from './theme.types';
 
-export const theme: DefaultTheme = {
+export const theme: Theme = {
   transitions: {
     fast: '0.2s ease',
     normal: '0.3s ease',
@@ -13,6 +13,7 @@ export const theme: DefaultTheme = {
     card: '#2B2440',
     background: '#1F1B2E',
     surface: '#2B2440',
+    surfaceHover: '#352E4E',
     text: '#FFFFFF',
     textSecondary: '#B7B7B7',
     textTertiary: '#8A8A8A',
@@ -82,6 +83,7 @@ export const theme: DefaultTheme = {
     sm: '0.125rem',
     md: '0.375rem',
     lg: '0.5rem',
+    xl: '0.75rem',
     full: '9999px'
   },
   shadows: {
@@ -92,59 +94,5 @@ export const theme: DefaultTheme = {
   }
 };
 
-// Extend the DefaultTheme interface
-declare module 'styled-components' {
-  export interface DefaultTheme {
-    colors: {
-      primary: string;
-      primaryDark: string;
-      secondary: string;
-      card: string;
-      background: string;
-      surface: string;
-      text: string;
-      textSecondary: string;
-      textTertiary: string;
-      accent: string;
-      error: string;
-      success: string;
-      warning: string;
-      border: string;
-      gray: {
-        [key: string]: string;
-      };
-    };
-    breakpoints: {
-      mobile: string;
-      tablet: string;
-      laptop: string;
-      desktop: string;
-    };
-    typography: {
-      fontFamily: string;
-      fontSize: {
-        [key: string]: string;
-      };
-      fontWeight: {
-        [key: string]: number;
-      };
-      lineHeight: {
-        [key: string]: string;
-      };
-    };
-    spacing: {
-      [key: string]: string;
-    };
-    borderRadius: {
-      [key: string]: string;
-    };
-    shadows: {
-      [key: string]: string;
-    };
-    transitions: {
-      fast: string;
-      normal: string;
-      slow: string;
-    };
-  }
-}
+// Export the theme type
+export type { Theme };

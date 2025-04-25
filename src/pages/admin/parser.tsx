@@ -3,40 +3,61 @@ import { useRouter } from 'next/router';
 import AdminLayout from '@/components/Admin/AdminLayout';
 import styled from 'styled-components';
 import { useAuth } from '@/hooks/useAuth';
+import ParserHistory from '@/components/Admin/ParserHistory';
+import { useTheme } from 'styled-components';
+
+interface ContentUpdateData {
+  title?: string;
+  type?: 'movie' | 'series';
+  posterUrl?: string;
+  source?: string;
+}
 
 const ParserContainer = styled.div`
-  padding: 20px;
+  padding: 2rem;
+  background: ${({ theme }) => theme.colors.background};
 `;
 
 const Section = styled.div`
   background: ${({ theme }) => theme.colors.card};
-  padding: 20px;
-  border-radius: 8px;
-  margin-bottom: 20px;
+  padding: 1.5rem;
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 `;
 
 const Grid = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 20px;
-  margin-top: 20px;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
 `;
 
 const FormGroup = styled.div`
-  margin-bottom: 15px;
+  margin-bottom: 1.25rem;
 `;
 
 const Label = styled.label`
   display: block;
-  margin-bottom: 5px;
-  font-weight: bold;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: ${({ theme }) => theme.colors.text};
 `;
 
 const Input = styled.input`
   width: 100%;
-  padding: 8px;
-  border: 1px solid ${({ theme }) => theme.colors.border};
-  border-radius: 4px;
+  padding: 0.75rem;
+  border: 2px solid ${({ theme }) => theme.colors.border};
+  border-radius: 8px;
+  background: ${({ theme }) => theme.colors.surface};
+  color: ${({ theme }) => theme.colors.text};
+  transition: all 0.3s ease;
+
+  &:focus {
+    outline: none;
+    border-color: ${({ theme }) => theme.colors.primary};
+    box-shadow: 0 0 0 2px ${({ theme }) => `${theme.colors.primary}22`};
+  }
 `;
 
 const Select = styled.select`
@@ -47,34 +68,66 @@ const Select = styled.select`
 `;
 
 const Button = styled.button`
-  padding: 10px 20px;
+  padding: 0.75rem 1.5rem;
   background-color: ${({ theme }) => theme.colors.primary};
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
-  transition: opacity 0.2s ease;
+  transition: all 0.3s ease;
   min-width: 150px;
+  font-weight: 600;
+  box-shadow: 0 2px 4px ${({ theme }) => `${theme.colors.primary}33`};
   
   &:hover {
-    opacity: 0.9;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px ${({ theme }) => `${theme.colors.primary}66`};
+  }
+  
+  &:active {
+    transform: translateY(0);
   }
   
   &:disabled {
     opacity: 0.7;
     cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
   }
 `;
 
 const StatusIndicator = styled.div<{ status: 'ACTIVE' | 'INACTIVE' | 'ERROR' }>`
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  margin-right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: white;
   background-color: ${({ status }) =>
-    status === 'ACTIVE' ? '#4CAF50' :
-    status === 'INACTIVE' ? '#9E9E9E' : '#F44336'};
+    status === 'ACTIVE' ? '#10B981' :
+    status === 'INACTIVE' ? '#6B7280' : '#EF4444'};
+  box-shadow: 0 2px 4px ${({ status }) =>
+    status === 'ACTIVE' ? 'rgba(16, 185, 129, 0.2)' :
+    status === 'INACTIVE' ? 'rgba(107, 114, 128, 0.2)' : 'rgba(239, 68, 68, 0.2)'};
+
+  &::before {
+    content: '';
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: white;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+    animation: ${({ status }) => status === 'ACTIVE' ? 'pulse 1.5s infinite' : 'none'};
+  }
+
+  @keyframes pulse {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.1); opacity: 0.5; }
+    100% { transform: scale(1); opacity: 1; }
+  }
 `;
 
 interface ParserSettings {
@@ -97,6 +150,7 @@ interface ParserStatus {
 }
 
 const ParserManagement = () => {
+  const theme = useTheme();
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,7 +165,7 @@ const ParserManagement = () => {
   });
   const [status, setStatus] = useState<ParserStatus>({
     status: 'INACTIVE',
-    lastRun: '-',
+    lastRun: null,
     processedItems: 0,
     errors: []
   });
@@ -248,6 +302,10 @@ const ParserManagement = () => {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json'
         },
+        body: JSON.stringify({
+          kinopoiskApiKey: settings.kinopoiskApiKey,
+          omdbApiKey: settings.omdbApiKey
+        })
       });
       
       const data = await response.json();
@@ -275,18 +333,23 @@ const ParserManagement = () => {
   return (
     <AdminLayout>
       <ParserContainer>
-        <h1>Управление парсером</h1>
+        <h1 style={{ fontSize: '1.75rem', marginBottom: '1.5rem', color: theme.colors.text }}>Управление парсером</h1>
 
         <Section>
           <h2>Статус парсера</h2>
-          <div className="status-wrapper" style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
-            <StatusIndicator status={status.status.toLowerCase() as 'ACTIVE' | 'INACTIVE' | 'ERROR'} />
-            <span>
+          <div className="status-wrapper" style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px' }}>
+            <StatusIndicator status={status.status.toLowerCase() as 'ACTIVE' | 'INACTIVE' | 'ERROR'}>
               {status.status === 'ACTIVE' ? 'Активен' :
                status.status === 'INACTIVE' ? 'Неактивен' : 'Ошибка'}
-            </span>
-          </div>
-          <p>Последний запуск: {status.lastRun}</p>
+            </StatusIndicator>
+            <p>Последний запуск: {status.lastRun ? 
+              new Date(status.lastRun).toLocaleString('ru-RU', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              }) : 'Нет данных'}</p>
           <p>Обработано элементов: {status.processedItems}</p>
           {status.errors.length > 0 && (
             <div>
@@ -302,6 +365,7 @@ const ParserManagement = () => {
             {isLoading ? 'Загрузка...' :
              status.status === 'ACTIVE' ? 'Остановить парсер' : 'Запустить парсер'}
           </Button>
+          </div>
         </Section>
 
         <Section>
@@ -380,6 +444,38 @@ const ParserManagement = () => {
             {isLoading ? 'Сохранение...' : 'Сохранить настройки'}
           </Button>
         </Section>
+        <ParserHistory
+          onUpdateContent={async (id: string, data: ContentUpdateData) => {
+            try {
+              const response = await fetch(`/api/admin/parser/content/${id}`, {
+                method: 'PUT',
+                headers: {
+                  'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+              });
+              if (!response.ok) throw new Error('Ошибка при обновлении контента');
+            } catch (error) {
+              console.error('Error updating content:', error);
+              throw error;
+            }
+          }}
+          onDeleteContent={async (id: string) => {
+            try {
+              const response = await fetch(`/api/admin/parser/content/${id}`, {
+                method: 'DELETE',
+                headers: {
+                  'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                }
+              });
+              if (!response.ok) throw new Error('Ошибка при удалении контента');
+            } catch (error) {
+              console.error('Error deleting content:', error);
+              throw error;
+            }
+          }}
+        />
       </ParserContainer>
     </AdminLayout>
   );

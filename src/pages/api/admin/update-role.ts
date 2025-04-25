@@ -1,55 +1,81 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { prisma } from '../../../config/database';
-import { verifyToken } from '../../../utils/auth';
+import { PrismaClient } from '@prisma/client';
+import { verifyToken } from '@/utils/auth';
+
+type DecodedToken = {
+  userId: number;
+  role?: 'USER' | 'ADMIN';
+};
+
+const prisma = new PrismaClient();
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'PUT') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Метод не поддерживается' });
   }
 
-  // Проверяем токен
-  const authHeader = req.headers.authorization;
-  if (!authHeader) {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) {
     return res.status(401).json({ error: 'Требуется авторизация' });
   }
 
-  const token = authHeader.split(' ')[1];
-  const payload = await verifyToken(token);
-
-  if (!payload || typeof payload.userId !== 'number') {
-    return res.status(401).json({ error: 'Недействительный токен' });
-  }
+  const { userId, action } = req.body;
 
   try {
-    // Проверяем, является ли текущий пользователь администратором
+    const decoded = await verifyToken(token) as DecodedToken;
+    if (!decoded || !decoded.userId) {
+      return res.status(401).json({ error: 'Недействительный токен' });
+    }
+
     const currentUser = await prisma.user.findUnique({
-      where: { id: payload.userId },
-      select: { role: true }
+      where: { id: decoded.userId }
     });
 
     if (!currentUser || currentUser.role !== 'ADMIN') {
-      return res.status(403).json({ error: 'Недостаточно прав' });
+      return res.status(403).json({ error: 'Доступ запрещен' });
     }
 
-    const { email, role } = req.body;
-
-    if (!email || !role || !['USER', 'ADMIN'].includes(role)) {
+    if (!userId || !action) {
       return res.status(400).json({ error: 'Некорректные данные' });
     }
 
-    // Обновляем роль пользователя
-    const updatedUser = await prisma.user.update({
-      where: { email },
-      data: { role },
-      select: { email: true, role: true }
+    const targetUser = await prisma.user.findUnique({
+      where: { id: userId }
     });
 
-    res.status(200).json({
-      message: 'Роль пользователя обновлена',
-      user: updatedUser
+    if (!targetUser) {
+      return res.status(404).json({ error: 'Пользователь не найден' });
+    }
+
+    let updateData = {};
+
+    switch (action) {
+      case 'makeAdmin':
+        updateData = { role: 'ADMIN' };
+        break;
+      case 'removeAdmin':
+        updateData = { role: 'USER' };
+        break;
+      case 'block':
+        updateData = { is_blocked: true };
+        break;
+      case 'unblock':
+        updateData = { is_blocked: false };
+        break;
+      default:
+        return res.status(400).json({ error: 'Неизвестное действие' });
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: updateData
     });
+
+    return res.status(200).json(updatedUser);
   } catch (error) {
-    console.error('Update role error:', error);
-    res.status(500).json({ error: 'Ошибка при обновлении роли пользователя' });
+    console.error('Update User API Error:', error);
+    return res.status(500).json({ error: 'Внутренняя ошибка сервера' });
+  } finally {
+    await prisma.$disconnect();
   }
 }

@@ -1,6 +1,7 @@
 import { MediaApi, KinopoiskMovie } from './mediaApi';
 import { prisma } from '@/config/database';
 import { Prisma, MediaType, MediaStatus, ParserStatusType } from '@prisma/client';
+import { VideoProcessor } from './videoProcessor';
 
 
 
@@ -22,11 +23,14 @@ export class MediaParser {
   private mediaApi: MediaApi;
   private isRunning: boolean = false;
 
+  private videoProcessor: VideoProcessor;
+
   constructor(kinopoiskApiKey: string, omdbApiKey: string) {
     if (!kinopoiskApiKey || !omdbApiKey) {
       throw new Error('Необходимо указать API ключи для Kinopoisk и OMDB');
     }
     this.mediaApi = new MediaApi(kinopoiskApiKey, omdbApiKey);
+    this.videoProcessor = new VideoProcessor(kinopoiskApiKey);
   }
 
   async start() {
@@ -122,13 +126,28 @@ export class MediaParser {
               const releaseDate = details.year ? new Date(details.year, 0) : null;
 
               // Создаем запись о медиаконтенте
+              let posterUrl = details.posterUrl;
+              let backdropUrl = details.coverUrl;
+
+              // Если постер отсутствует, пробуем найти через OMDB
+              if (!posterUrl && details.imdbId) {
+                try {
+                  const omdbDetails = await this.mediaApi.getOmdbDetails(details.imdbId);
+                  if (omdbDetails.Poster && omdbDetails.Poster !== 'N/A') {
+                    posterUrl = omdbDetails.Poster;
+                  }
+                } catch (omdbError) {
+                  console.error(`Ошибка получения постера из OMDB для ${details.imdbId}:`, omdbError);
+                }
+              }
+
               const mediaData: Prisma.MediaCreateInput = {
                 title: details.nameRu || details.nameOriginal || String(movie.filmId),
                 original_title: details.nameOriginal,
                 type: mediaType,
                 description: details.description || '',
-                poster_url: details.posterUrl || null,
-                backdrop_url: details.coverUrl || null,
+                poster_url: posterUrl || null,
+                backdrop_url: backdropUrl || null,
                 release_date: releaseDate,
                 rating: details.ratingKinopoisk || 0,
                 duration: details.filmLength || null,
@@ -146,6 +165,9 @@ export class MediaParser {
               const createdMedia = await prisma.media.create({
                 data: mediaData
               });
+
+              // Обработка видео или трейлера
+              await this.videoProcessor.processMediaVideo(createdMedia.id, String(movie.filmId));
 
               // Если это сериал, получаем информацию о сериях
               if (mediaType === 'SERIES') {
@@ -252,21 +274,21 @@ export class MediaParser {
               if (!episodes || !Array.isArray(episodes)) continue;
 
               for (const season of episodes) {
-                if (!season.episodes) continue;
+                if (!season.episodes || !season.number) continue;
                 for (const episode of season.episodes) {
                   try {
                     await prisma.episode.upsert({
                       where: {
                         media_id_season_number_episode_number: {
                           media_id: media.id,
-                          season_number: season.seasonNumber,
+                          season_number: season.number,
                           episode_number: episode.episodeNumber
                         }
                       },
                       create: {
                         title: episode.nameRu || episode.nameEn || `Серия ${episode.episodeNumber}`,
                         episode_number: episode.episodeNumber,
-                        season_number: season.seasonNumber,
+                        season_number: season.number,
                         air_date: episode.releaseDate ? new Date(episode.releaseDate) : null,
                         description: episode.synopsis || null,
                         media_id: media.id

@@ -44,14 +44,31 @@ const AdminDashboard = () => {
 
   const loadDashboardStats = async () => {
     try {
+      setIsLoading(true);
+      const cachedStats = sessionStorage.getItem('adminDashboardStats');
+      const lastUpdate = sessionStorage.getItem('adminDashboardStatsTime');
+      
+      // Используем кэшированные данные, если они не старше 5 минут
+      if (cachedStats && lastUpdate && (Date.now() - Number(lastUpdate)) < 300000) {
+        setStats(JSON.parse(cachedStats));
+        setIsLoading(false);
+        return;
+      }
+
       const response = await fetch('/api/admin/stats', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
       });
+      
       if (!response.ok) throw new Error('Ошибка при загрузке статистики');
+      
       const data = await response.json();
       setStats(data);
+      
+      // Кэшируем полученные данные
+      sessionStorage.setItem('adminDashboardStats', JSON.stringify(data));
+      sessionStorage.setItem('adminDashboardStatsTime', Date.now().toString());
     } catch (error) {
       console.error('Error loading dashboard stats:', error);
     } finally {
@@ -60,6 +77,8 @@ const AdminDashboard = () => {
   };
 
   useEffect(() => {
+    let mounted = true;
+    
     const checkAuth = async () => {
       if (authLoading) return;
       
@@ -68,11 +87,17 @@ const AdminDashboard = () => {
         return;
       }
 
-      setIsAuthorized(true);
-      await loadDashboardStats();
+      if (mounted) {
+        setIsAuthorized(true);
+        await loadDashboardStats();
+      }
     };
 
     checkAuth();
+
+    return () => {
+      mounted = false;
+    };
   }, [user, router, authLoading]);
 
   if (!isAuthorized) {

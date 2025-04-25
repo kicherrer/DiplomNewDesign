@@ -16,6 +16,7 @@ model User {
   id             Int      @id @default(autoincrement())
   email          String   @unique
   username       String
+  nickname       String?
   password_hash  String
   role           UserRole @default(USER)
   is_verified    Boolean  @default(false)
@@ -58,6 +59,10 @@ model Media {
   status          MediaStatus     @default(ACTIVE)
   source_id       String?
   source_type     String?
+  actors          String[]        @default([])
+  director        String?
+  writers         String[]        @default([])
+  crew            Json?
   created_at      DateTime        @default(now())
   updated_at      DateTime        @updatedAt
   genres          Genre[]
@@ -65,6 +70,7 @@ model Media {
   viewing_history ViewingHistory[]
   favorites       Favorites[]
   watchlist       Watchlist[]
+  video_sources   VideoSource[]
 }
 
 model UserProfile {
@@ -171,6 +177,17 @@ model ParserSettings {
   contentTypes   String[] @default(["MOVIE", "SERIES"])
 }
 
+model ParserHistory {
+  id        Int      @id @default(autoincrement())
+  source    String
+  status    String
+  details   String?
+  startTime DateTime @default(now())
+  endTime   DateTime?
+  itemsProcessed Int @default(0)
+  errors    String[]
+}
+
 model Watchlist {
   id         Int      @id @default(autoincrement())
   user_id    Int
@@ -180,4 +197,26 @@ model Watchlist {
   media      Media    @relation(fields: [media_id], references: [id])
 
   @@unique([user_id, media_id])
+}
+
+model VideoSource {
+  id         Int      @id @default(autoincrement())
+  media_id   Int
+  url        String
+  quality    String
+  type       String
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  media      Media    @relation(fields: [media_id], references: [id], onDelete: Cascade)
+}
+
+model VideoSource {
+  id         Int      @id @default(autoincrement())
+  media_id   Int
+  url        String
+  quality    String
+  type       String
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  media      Media    @relation(fields: [media_id], references: [id], onDelete: Cascade)
 }
